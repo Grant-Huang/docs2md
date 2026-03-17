@@ -1,116 +1,66 @@
-# All2Markdown
+# 文档资料知识化APP
 
-一个将各种格式文件转换为Markdown格式的工具。目前支持PDF文件的转换，未来将支持更多格式。
+将 Word (docx) 和 Excel 文档转换为 Markdown 或纯文本的工具。支持单文件、目录批量转换，docx 中的图片经 Qwen3-VL 解析后以引用形式插入。
 
-本项目基于 [markdownify-mcp](http://github.com/zcaceres/markdownify-mcp) 项目开发。
+## 功能
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-## 功能特点
-
-- 支持PDF文件转换为Markdown格式
-- 支持PDF文件转换为纯文本格式
-- 保持文档的格式和结构
-- 支持中文文本提取
-- 自动识别标题层级
-- 保持段落顺序
+- **Docx**：python-docx 提取正文与表格，图片保存到 assets/，调用 Qwen3-VL 生成说明并以 blockquote 插入
+- **Excel**：MarkItDown 多工作簿转 Markdown 表格，表头为 sheet 名
+- **单文件 / 目录**：支持选择单个文件或整个目录
+- **输出**：用户选择输出目录，支持 .md 或 .txt
 
 ## 安装
 
-1. 克隆仓库：
-```bash
-git clone https://github.com/Grant-Huang/all2markdown.git
-cd all2markdown
-```
-
-2. 创建虚拟环境（推荐）：
 ```bash
 python -m venv .venv
-source .venv/bin/activate  # Linux/Mac
-# 或
-.venv\Scripts\activate  # Windows
-```
+.venv\Scripts\activate   # Windows
+# source .venv/bin/activate  # Linux/Mac
 
-3. 安装依赖：
-```bash
 pip install -r requirements.txt
 ```
 
-4. 安装Tesseract-OCR（如果需要OCR功能）：
-- Windows: 从[这里](https://github.com/UB-Mannheim/tesseract/wiki)下载安装
-- Linux: `sudo apt-get install tesseract-ocr`
-- Mac: `brew install tesseract`
+## 配置
 
-## 使用方法
+复制 `.env.example` 为 `.env`，填入 AI 配置：
 
-### 命令行方式
-
-基本用法：
 ```bash
-python all2md.py <输入文件路径> [--format {markdown,text}] [--output 输出文件路径]
+cp .env.example .env
+# 编辑 .env，设置 DASHSCOPE_API_KEY=sk-xxx
 ```
 
-参数说明：
-- `输入文件路径`：要转换的文件路径
-- `--format`：输出格式，可选 `markdown`（默认）或 `text`
-- `--output`或`-o`：输出文件路径（可选，默认为输入文件同目录下的同名文件）
+| 变量 | 说明 |
+|------|------|
+| `DASHSCOPE_API_KEY` | 通义千问 API Key，用于 docx 图片解析（可选，未配置时跳过图片解析） |
+| `DASHSCOPE_BASE_URL` | DashScope 兼容端点（可选，默认已设置） |
+| `QWEN_VL_MODEL` | 图片解析模型（可选，默认 qwen3-vl-plus） |
 
-示例：
+## 运行
+
 ```bash
-# 转换为Markdown格式（默认）
-python all2md.py document.pdf
-
-# 转换为纯文本格式
-python all2md.py document.pdf --format text
-
-# 指定输出文件
-python all2md.py document.pdf -o output.md
+python run.py
+# 或
+uvicorn backend.main:app --host 0.0.0.0 --port 8000
 ```
 
-### Web界面方式
+访问 http://localhost:8000
 
-1. 启动Web服务器：
-```bash
-cd web
-python app.py
+## 项目结构
+
+```
+all2markdown/
+├── backend/           # FastAPI 后端
+│   ├── main.py
+│   ├── config.py
+│   ├── routers/
+│   ├── converters/
+│   ├── services/     # Qwen VL
+│   └── utils/
+├── frontend/          # 静态前端
+├── uploads/           # 临时上传
+├── output/            # 默认输出
+└── requirements.txt
 ```
 
-2. 打开浏览器访问：http://localhost:5000
+## License
 
-3. 在网页界面上：
-   - 选择要转换的PDF文件
-   - 选择输出格式（Markdown或纯文本）
-   - 点击"转换"按钮
-   - 转换结果会直接显示在页面上
-
-## 示例
-
-### 输入PDF文件
-![输入PDF文件](docs/images/input.png)
-
-### 转换后的Markdown
-![转换后的Markdown](docs/images/output.png)
-
-## 支持的格式
-
-目前支持的输入格式：
-- PDF文件 (.pdf)
-
-计划支持的格式：
-- Word文档 (.docx)
-- Excel表格 (.xlsx)
-- PowerPoint演示文稿 (.pptx)
-- 图片文件 (.jpg, .png, etc.)
-- 网页 (.html)
-
-## 贡献
-
-欢迎提交Pull Request来改进代码或添加新功能。
-
-## 致谢
-
-本项目基于 [markdownify-mcp](http://github.com/zcaceres/markdownify-mcp) 项目开发，感谢原作者的开源贡献。
-
-## 许可证
-
-本项目采用MIT许可证 - 详见 [LICENSE](LICENSE) 文件。
+MIT
