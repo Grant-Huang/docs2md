@@ -120,12 +120,18 @@ python all2md.py docs/ -o output/ --format txt --verbose
 > "将 /Users/me/docs 整个文件夹批量转换，输出到 /Users/me/output"
 > "转换 /data/table.xlsx，使用 txt 格式"
 
+### AI Skills 集成文档
+
+完整的 AI 集成指南（含 MCP 工具定义、OpenAI Function Calling JSON Schema、REST API 示例、LangChain 接入代码）可通过以下方式访问：
+
+- **Web URL（服务运行时）：** `http://<host>:8000/api/skills-guide`
+- **源文件：** `docs/ai_skills_guide.md`
+
+将此 URL 发给任何 AI 平台或 Agent 框架，它们即可解析并创建对应的 skill / tool / action。
+
 ### 手动测试 MCP 服务器
 
 ```bash
-# 验证工具列表（需安装 mcp[cli]）
-python mcp_server.py --help
-
 # 或直接用 mcp dev 调试
 mcp dev mcp_server.py
 ```
@@ -170,6 +176,8 @@ docs2md/
 ├── run.py                        # Web 服务启动脚本
 ├── all2md.py                     # CLI 入口
 ├── mcp_server.py                 # MCP 服务器（Claude 桌面版集成）
+├── docs/
+│   └── ai_skills_guide.md        # AI 集成指南（MCP / REST API / Function Calling）
 ├── requirements.txt
 └── .env.example
 ```
