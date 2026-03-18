@@ -7,9 +7,10 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.7.2/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/github-markdown-css@5/github-markdown.min.css" rel="stylesheet">
     <style>
         .preview {
-            max-height: 500px;
+            height: calc(100vh - 120px);
             overflow-y: auto;
             background-color: #f8f9fa;
             padding: 1rem;
@@ -23,6 +24,7 @@
         .error {
             color: #dc3545;
             display: none;
+            margin-top: 1rem;
         }
         .copy-btn {
             position: absolute;
@@ -44,22 +46,68 @@
             font-size: 1rem;
             color: #6c757d;
         }
+        .converter-section {
+            height: calc(100vh - 120px);
+            overflow-y: auto;
+            padding-right: 15px;
+        }
+        .result-section {
+            height: calc(100vh - 120px);
+            display: flex;
+            flex-direction: column;
+        }
+        .result-section .card-body {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            min-height: 0;
+        }
+        .result-section .preview {
+            flex: 1;
+            min-height: 200px;
+        }
+        .section-title {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            padding-bottom: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .process-panel .card-header {
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+        }
+        .markdown-body {
+            box-sizing: border-box;
+            min-width: 200px;
+            max-width: 980px;
+            padding: 1rem;
+        }
+        .markdown-body table {
+            border-collapse: collapse;
+        }
+        .markdown-body th, .markdown-body td {
+            border: 1px solid #dee2e6;
+            padding: 0.25rem 0.5rem;
+        }
     </style>
 </head>
 <body>
-    <div class="container py-5">
-        <h1 class="text-center mb-4">All to Markdown</h1>
-        <p class="text-center text-muted mb-4">将PDF文件和YouTube视频转换为Markdown格式</p>
+    <div class="container-fluid py-3">
+        <h1 class="text-center mb-3">All to Markdown</h1>
+        <p class="text-center text-muted mb-4">将 PDF、Word、Excel 和视频转换为 Markdown 格式</p>
         
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="card">
+        <div class="row">
+            <!-- 左侧转换功能区 -->
+            <div class="col-md-5">
+                <div class="card converter-section">
                     <div class="card-body">
+                        <!-- PDF转换部分 -->
+                        <div class="section-title">PDF文件转换</div>
                         <form id="uploadForm" class="mb-4">
                             <div class="mb-3">
                                 <label for="file" class="form-label">选择文件</label>
-                                <input type="file" class="form-control" id="file" name="file" accept=".pdf,.mp4,.mov,.avi" required>
-                                <div class="form-text">支持PDF文件和视频文件（MP4、MOV、AVI）</div>
+                                <input type="file" class="form-control" id="file" name="file" accept=".pdf,.mp4,.mov,.avi,.doc,.docx,.xls,.xlsx" required>
+                                <div class="form-text">支持 PDF、Word（doc/docx）、Excel（xls/xlsx）和视频文件</div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">输出格式</label>
@@ -76,11 +124,13 @@
                                     </label>
                                 </div>
                             </div>
-                            <button type="submit" class="btn btn-primary">转换文件</button>
+                            <button type="button" class="btn btn-primary" onclick="convertPdf()">转换文件</button>
                         </form>
                         
                         <hr class="my-4">
                         
+                        <!-- YouTube转换部分 -->
+                        <div class="section-title">YouTube视频转换</div>
                         <form id="youtubeForm" class="mb-4">
                             <div class="mb-3">
                                 <label for="youtubeUrl" class="form-label">YouTube视频链接</label>
@@ -89,33 +139,61 @@
                             <button type="submit" class="btn btn-primary">转换视频为Markdown</button>
                         </form>
                         
-                        <div class="form-group">
+                        <hr class="my-4">
+                        
+                        <!-- 本地视频转换部分 -->
+                        <div class="section-title">本地视频转换</div>
+                        <div class="form-group mb-3">
                             <label for="videoFile">上传视频文件：</label>
                             <input type="file" id="videoFile" accept="video/*" class="form-control">
                             <small class="form-text text-muted">支持的格式：MP4, AVI, MOV, MKK 等</small>
                         </div>
-                        <div id="progressContainer" style="display: none;">
-                            <div class="progress mb-2">
-                                <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
-                            </div>
-                            <div id="progressMessage" class="text-muted"></div>
-                        </div>
                         <button type="button" class="btn btn-primary" onclick="convertVideo()">转换视频</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 右侧结果显示区 -->
+            <div class="col-md-7">
+                <div class="card result-section">
+                    <div class="card-body">
+                        <div class="section-title">转换结果</div>
                         
-                        <div class="loading text-center">
-                            <div class="spinner-border text-primary" role="status">
-                                <span class="visually-hidden">加载中...</span>
+                        <!-- 转换过程（可折叠，置于结果区上方） -->
+                        <div class="process-panel card mb-2" id="processPanel" style="display: none;">
+                            <div class="card-header d-flex justify-content-between align-items-center py-2" data-bs-toggle="collapse" data-bs-target="#processCollapse">
+                                <span><i class="bi bi-chevron-down me-1 process-toggle-icon"></i>转换过程</span>
+                                <button type="button" class="btn btn-sm btn-link p-0 text-muted" onclick="event.stopPropagation(); hideProcessPanel()">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
                             </div>
-                            <p class="mt-2">正在转换，请稍候...</p>
+                            <div class="collapse show" id="processCollapse">
+                                <div class="card-body py-2">
+                                    <div class="loading text-center" id="loading" style="display: none;">
+                                        <div class="spinner-border spinner-border-sm text-primary" role="status"></div>
+                                        <span class="ms-2">正在转换，请稍候...</span>
+                                    </div>
+                                    <div id="convertStatus" class="text-muted small mt-1" style="display: none;"></div>
+                                    <div id="progressContainer" style="display: none;">
+                                        <div class="progress mb-2">
+                                            <div id="progressBar" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                                        </div>
+                                        <div id="progressMessage" class="text-muted small"></div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="error"></div>
+                        <!-- 错误信息 -->
+                        <div class="error" id="error"></div>
                         
+                        <!-- 结果预览 -->
                         <div class="preview">
-                            <button class="copy-btn" id="copyBtn" style="display: none;">
+                            <button class="copy-btn" id="copyBtn" style="display: none;" title="复制转换结果到剪贴板">
                                 <i class="bi bi-clipboard"></i>
                             </button>
-                            <pre><code id="output"></code></pre>
+                            <div id="outputRendered" class="markdown-body" style="display: none;"></div>
+                            <pre id="outputRaw" style="display: none; margin: 0;"><code id="output"></code></pre>
                         </div>
                     </div>
                 </div>
@@ -124,62 +202,116 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="/js/highlight.min.js" defer></script>
     <script>
-        document.getElementById('uploadForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            
-            const formData = new FormData(e.target);
-            const loading = document.querySelector('.loading');
-            const error = document.querySelector('.error');
-            const output = document.getElementById('output');
-            const copyBtn = document.getElementById('copyBtn');
-            
-            loading.style.display = 'block';
-            error.style.display = 'none';
-            output.textContent = '';
-            copyBtn.style.display = 'none';
-            
-            try {
-                const response = await fetch('/convert', {
-                    method: 'POST',
-                    body: formData
-                });
-                
-                const data = await response.json();
-                
-                if (data.error) {
-                    error.textContent = data.error;
-                    error.style.display = 'block';
-                } else {
-                    output.textContent = data.content;
-                    if (formData.get('format') === 'markdown') {
-                        hljs.highlightElement(output);
+        let outputRawContent = '';
+        function parseSSE(buf) {
+            const parts = buf.split(/\n\ndata: /);
+            const messages = parts.map((p, i) => (i === 0 ? p : 'data: ' + p));
+            let remainder = '';
+            if (messages.length > 0) {
+                const last = messages[messages.length - 1];
+                try {
+                    if (last.startsWith('data: ')) {
+                        JSON.parse(last.slice(6).trim());
                     }
-                    copyBtn.style.display = 'block';
+                } catch (e) {
+                    remainder = messages.pop() || '';
                 }
-            } catch (err) {
-                error.textContent = err.message || '转换失败，请重试';
-                error.style.display = 'block';
-            } finally {
-                loading.style.display = 'none';
             }
+            return { messages, remainder };
+        }
+        function hideProcessPanel() {
+            document.getElementById('processPanel').style.display = 'none';
+        }
+        function showProcessPanel() {
+            const panel = document.getElementById('processPanel');
+            panel.style.display = 'block';
+            const collapseEl = document.getElementById('processCollapse');
+            const instance = bootstrap.Collapse.getInstance(collapseEl) || new bootstrap.Collapse(collapseEl, { toggle: false });
+            instance.show();
+            const icon = document.querySelector('.process-toggle-icon');
+            if (icon) icon.className = 'bi bi-chevron-down me-1 process-toggle-icon';
+        }
+        (function initProcessPanel() {
+            const collapseEl = document.getElementById('processCollapse');
+            if (collapseEl) {
+                collapseEl.addEventListener('show.bs.collapse', () => {
+                    const icon = document.querySelector('.process-toggle-icon');
+                    if (icon) icon.className = 'bi bi-chevron-down me-1 process-toggle-icon';
+                });
+                collapseEl.addEventListener('hide.bs.collapse', () => {
+                    const icon = document.querySelector('.process-toggle-icon');
+                    if (icon) icon.className = 'bi bi-chevron-right me-1 process-toggle-icon';
+                });
+            }
+        })();
+        function setOutput(content, isMarkdown) {
+            const rendered = document.getElementById('outputRendered');
+            const raw = document.getElementById('outputRaw');
+            const copyBtn = document.getElementById('copyBtn');
+            if (content && typeof content === 'string') {
+                if (content.trim().startsWith('data: ') || /"type"\s*:\s*"(?:debug|complete|error)"/.test(content)) {
+                    const parts = content.split(/\n\ndata: /);
+                    for (let i = parts.length - 1; i >= 0; i--) {
+                        let p = parts[i];
+                        if (i > 0) p = 'data: ' + p;
+                        else if (!p.startsWith('data: ')) p = 'data: ' + p;
+                        if (p.startsWith('data: ')) {
+                            try {
+                                const d = JSON.parse(p.slice(6).trim());
+                                if (d.type === 'complete' && d.content && typeof d.content === 'string') {
+                                    content = d.content;
+                                    isMarkdown = true;
+                                    break;
+                                }
+                            } catch (e) { /* skip */ }
+                        }
+                    }
+                }
+                if (content && content.trim().startsWith('data: ')) {
+                    content = '';
+                }
+            }
+            outputRawContent = content || '';
+            if (isMarkdown && content) {
+                try {
+                    if (typeof marked !== 'undefined') {
+                        marked.setOptions({ highlight: (code) => (typeof hljs !== 'undefined' ? hljs.highlightAuto(code).value : code) });
+                        const html = marked.parse(content);
+                        rendered.innerHTML = (typeof html === 'string' ? html : content);
+                        rendered.querySelectorAll('pre code').forEach((el) => { if (typeof hljs !== 'undefined') hljs.highlightElement(el); });
+                    } else {
+                        rendered.textContent = content;
+                    }
+                } catch (e) {
+                    rendered.textContent = content;
+                }
+                rendered.style.display = 'block';
+                raw.style.display = 'none';
+            } else {
+                document.getElementById('output').textContent = content || '';
+                if (content && typeof hljs !== 'undefined') hljs.highlightElement(document.getElementById('output'));
+                raw.style.display = content ? 'block' : 'none';
+                rendered.style.display = 'none';
+            }
+            copyBtn.style.display = content ? 'block' : 'none';
+        }
+        document.getElementById('uploadForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            convertPdf();
         });
 
-        // YouTube转换表单处理
         document.getElementById('youtubeForm').addEventListener('submit', async (e) => {
             e.preventDefault();
-            
             const formData = new FormData(e.target);
             const loading = document.querySelector('.loading');
             const error = document.querySelector('.error');
-            const output = document.getElementById('output');
-            const copyBtn = document.getElementById('copyBtn');
-            
+            showProcessPanel();
             loading.style.display = 'block';
             error.style.display = 'none';
-            output.textContent = '';
-            copyBtn.style.display = 'none';
+            setOutput('', false);
             
             try {
                 const response = await fetch('/api/tools/youtube-to-markdown', {
@@ -198,9 +330,11 @@
                     error.textContent = data.error;
                     error.style.display = 'block';
                 } else {
-                    output.textContent = data.text;
-                    hljs.highlightElement(output);
-                    copyBtn.style.display = 'block';
+                    setOutput(data.text, true);
+                    setTimeout(() => {
+                        const c = bootstrap.Collapse.getInstance(document.getElementById('processCollapse'));
+                        if (c) c.hide();
+                    }, 500);
                 }
             } catch (err) {
                 error.textContent = '转换失败，请重试';
@@ -212,9 +346,8 @@
 
         // 复制按钮功能
         document.getElementById('copyBtn').addEventListener('click', async () => {
-            const output = document.getElementById('output');
             try {
-                await navigator.clipboard.writeText(output.textContent);
+                await navigator.clipboard.writeText(outputRawContent);
                 const copyBtn = document.getElementById('copyBtn');
                 const originalIcon = copyBtn.innerHTML;
                 copyBtn.innerHTML = '<i class="bi bi-check"></i>';
@@ -233,10 +366,26 @@
                 return;
             }
 
+            // 获取所有需要的元素
+            const loading = document.querySelector('.loading');
+            const error = document.querySelector('.error');
+            const output = document.getElementById('output');
+            const copyBtn = document.getElementById('copyBtn');
+
+            if (!loading || !error) {
+                console.error('找不到必要的DOM元素');
+                return;
+            }
+
             const formData = new FormData();
             formData.append('video', videoFile);
 
-            // Show progress container
+            showProcessPanel();
+            loading.style.display = 'block';
+            document.getElementById('convertStatus').style.display = 'none';
+            error.style.display = 'none';
+            setOutput('', false);
+
             const progressContainer = document.getElementById('progressContainer');
             const progressBar = document.getElementById('progressBar');
             const progressMessage = document.getElementById('progressMessage');
@@ -250,115 +399,189 @@
                     body: formData
                 });
 
-                // Handle progress updates
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-
+                let buffer = '';
                 while (true) {
-                    const {value, done} = await reader.read();
+                    const { value, done } = await reader.read();
                     if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
+                    buffer += decoder.decode(value, { stream: true });
+                    const { messages, remainder } = parseSSE(buffer);
+                    buffer = remainder;
+                    for (const msg of messages) {
+                        if (msg.startsWith('data: ')) {
                             try {
-                                const data = JSON.parse(line.slice(6));
-                                if (data.type === 'progress') {
-                                    progressBar.style.width = `${data.progress}%`;
-                                    progressMessage.textContent = data.message;
+                                const data = JSON.parse(msg.slice(6).trim());
+                                if (data.type === 'error') {
+                                    error.textContent = data.content;
+                                    error.style.display = 'block';
                                 } else if (data.type === 'complete') {
-                                    const output = document.getElementById('output');
-                                    output.textContent = data.content;
-                                    hljs.highlightElement(output);
-                                    document.getElementById('copyBtn').style.display = 'block';
-                                } else if (data.type === 'error') {
-                                    throw new Error(data.error);
+                                    setOutput(data.content, true);
+                                    setTimeout(() => {
+                                        const c = bootstrap.Collapse.getInstance(document.getElementById('processCollapse'));
+                                        if (c) c.hide();
+                                    }, 500);
+                                } else if (data.type === 'debug') {
+                                    progressMessage.textContent = data.content;
+                                } else if (data.type === 'progress') {
+                                    progressBar.style.width = `${data.progress}%`;
+                                    progressMessage.textContent = data.content;
                                 }
                             } catch (e) {
-                                console.error('解析响应数据失败:', e);
+                                console.error('Error parsing message:', e);
+                                error.textContent = '解析响应数据失败: ' + e.message;
+                                error.style.display = 'block';
                             }
                         }
                     }
                 }
-            } catch (error) {
-                alert('转换失败：' + error.message);
+                if (buffer.trim()) {
+                    const { messages } = parseSSE(buffer + '\n\n');
+                    for (const msg of messages) {
+                        if (msg.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(msg.slice(6).trim());
+                                if (data.type === 'complete') setOutput(data.content, true);
+                                else if (data.type === 'error') {
+                                    error.textContent = data.content;
+                                    error.style.display = 'block';
+                                }
+                            } catch (e) { console.error('Parse error:', e); }
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('转换失败:', err);
+                error.textContent = '转换失败: ' + err.message;
+                error.style.display = 'block';
             } finally {
-                // Hide progress container after a delay
-                setTimeout(() => {
-                    progressContainer.style.display = 'none';
-                }, 2000);
+                loading.style.display = 'none';
+                progressContainer.style.display = 'none';
             }
         }
 
-        async function convertFile() {
-            const fileInput = document.getElementById('fileInput');
-            const file = fileInput.files[0];
-            if (!file) {
-                alert('请选择文件');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('file', file);
-            formData.append('format', 'markdown');
-
-            // Show progress container
-            const progressContainer = document.getElementById('progressContainer');
-            const progressBar = document.getElementById('progressBar');
-            const progressMessage = document.getElementById('progressMessage');
-            progressContainer.style.display = 'block';
-            progressBar.style.width = '0%';
-            progressMessage.textContent = '准备转换...';
-
+        async function convertPdf() {
             try {
+                const fileInput = document.getElementById('file');
+                if (!fileInput) {
+                    console.error('找不到file输入框');
+                    return;
+                }
+
+                const file = fileInput.files[0];
+                if (!file) {
+                    alert('请选择要转换的PDF文件');
+                    return;
+                }
+
+                const loading = document.querySelector('.loading');
+                const error = document.querySelector('.error');
+                if (!loading || !error) return;
+
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('format', document.querySelector('input[name="format"]:checked').value);
+
+                showProcessPanel();
+                loading.style.display = 'block';
+                document.getElementById('convertStatus').style.display = 'block';
+                document.getElementById('convertStatus').textContent = '准备转换...';
+                error.style.display = 'none';
+                setOutput('', false);
+
                 const response = await fetch('/convert', {
                     method: 'POST',
                     body: formData
                 });
 
-                // Handle progress updates
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
-                let result = '';
-
+                let buffer = '';
                 while (true) {
-                    const {value, done} = await reader.read();
+                    const { value, done } = await reader.read();
                     if (done) break;
-
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
+                    buffer += decoder.decode(value, { stream: true });
+                    const { messages, remainder } = parseSSE(buffer);
+                    buffer = remainder;
+                    for (const msg of messages) {
+                        if (msg.startsWith('data: ')) {
                             try {
-                                const data = JSON.parse(line.slice(6));
-                                if (data.type === 'progress') {
-                                    progressBar.style.width = `${data.progress}%`;
-                                    progressMessage.textContent = data.message;
+                                const data = JSON.parse(msg.slice(6).trim());
+                                if (data.type === 'error') {
+                                    error.textContent = data.content || data.error || '转换失败';
+                                    error.style.display = 'block';
+                                    const statusEl = document.getElementById('convertStatus');
+                                    const cur = statusEl.textContent || '';
+                                    statusEl.textContent = cur ? cur + '\n转换失败' : '转换失败';
+                                    statusEl.style.display = 'block';
                                 } else if (data.type === 'complete') {
-                                    result = data.content;
-                                    document.getElementById('output').value = result;
-                                } else if (data.type === 'error') {
-                                    throw new Error(data.error);
+                                    setOutput(data.content, formData.get('format') === 'markdown');
+                                    const statusEl = document.getElementById('convertStatus');
+                                    const cur = statusEl.textContent || '';
+                                    statusEl.textContent = cur ? cur + '\n转换完成' : '转换完成';
+                                    statusEl.style.display = 'block';
+                                    setTimeout(() => {
+                                        const c = bootstrap.Collapse.getInstance(document.getElementById('processCollapse'));
+                                        if (c) c.hide();
+                                    }, 500);
+                                } else if (data.type === 'debug') {
+                                    const el = document.getElementById('convertStatus');
+                                    const cur = el.textContent || '';
+                                    el.textContent = cur && cur !== '准备转换...' ? cur + '\n' + data.content : data.content;
+                                } else if (data.type === 'progress') {
+                                    document.getElementById('convertStatus').textContent = data.content || '处理中...';
                                 }
                             } catch (e) {
-                                console.error('解析响应数据失败:', e);
+                                console.error('Error parsing message:', e);
+                                error.textContent = '解析响应数据失败: ' + e.message;
+                                error.style.display = 'block';
                             }
                         }
                     }
                 }
+                if (buffer.trim()) {
+                    const { messages } = parseSSE(buffer + '\n\n');
+                    for (const msg of messages) {
+                        if (msg.startsWith('data: ')) {
+                            try {
+                                const data = JSON.parse(msg.slice(6).trim());
+                                if (data.type === 'complete') {
+                                    setOutput(data.content, formData.get('format') === 'markdown');
+                                    const statusEl = document.getElementById('convertStatus');
+                                    const cur = statusEl.textContent || '';
+                                    statusEl.textContent = cur ? cur + '\n转换完成' : '转换完成';
+                                    statusEl.style.display = 'block';
+                                    setTimeout(() => {
+                                        const c = bootstrap.Collapse.getInstance(document.getElementById('processCollapse'));
+                                        if (c) c.hide();
+                                    }, 500);
+                                } else if (data.type === 'error') {
+                                    error.textContent = data.content || data.error || '转换失败';
+                                    error.style.display = 'block';
+                                }
+                            } catch (e) { console.error('Parse error:', e); }
+                        }
+                    }
+                }
             } catch (error) {
-                alert('转换失败：' + error.message);
+                console.error('转换失败:', error);
+                const errorElement = document.querySelector('.error');
+                if (errorElement) {
+                    errorElement.textContent = '转换失败: ' + error.message;
+                    errorElement.style.display = 'block';
+                }
             } finally {
-                // Hide progress container after a delay
-                setTimeout(() => {
-                    progressContainer.style.display = 'none';
-                }, 2000);
+                document.querySelector('.loading').style.display = 'none';
             }
         }
     </script>
 </body>
-</html> 
 </html> 

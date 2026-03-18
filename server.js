@@ -17,18 +17,18 @@ app.use(express.json());
 
 // 添加 CSP 头
 app.use((req, res, next) => {
-  res.setHeader(
-    'Content-Security-Policy',
-    "default-src 'self'; " +
-    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net; " +
-    "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
-    "font-src 'self' https://cdn.jsdelivr.net; " +
-    "img-src 'self' data: blob:; " +
-    "media-src 'self' data: blob:; " +
-    "connect-src 'self'"
-  );
-  next();
-});
+    res.setHeader(
+      'Content-Security-Policy',
+      "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; " +
+      "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+      "font-src 'self' https://cdn.jsdelivr.net; " +
+      "img-src 'self' data: blob:; " +
+      "media-src 'self' data: blob:; " +
+      "connect-src 'self'"
+    );
+    next();
+  });
 
 // 提供静态文件服务
 app.use(express.static('public'));
@@ -70,7 +70,14 @@ const upload = multer({
     },
     fileFilter: function (req, file, cb) {
         // 检查文件类型
-        const allowedTypes = ['application/pdf', 'video/mp4', 'video/quicktime', 'video/x-msvideo'];
+        const allowedTypes = [
+            'application/pdf',
+            'video/mp4', 'video/quicktime', 'video/x-msvideo',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel'
+        ];
         if (!allowedTypes.includes(file.mimetype)) {
             console.error('不支持的文件类型:', file.mimetype);
             return cb(new Error('不支持的文件类型'));
@@ -124,6 +131,12 @@ app.post('/convert', upload.single('file'), (req, res) => {
         pythonScript = path.join(__dirname, 'converters', 'pdf_converter.py');
     } else if (fileType.startsWith('video/')) {
         pythonScript = path.join(__dirname, 'converters', 'video_converter.py');
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+               fileType === 'application/msword') {
+        pythonScript = path.join(__dirname, 'converters', 'doc_converter.py');
+    } else if (fileType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+               fileType === 'application/vnd.ms-excel') {
+        pythonScript = path.join(__dirname, 'converters', 'excel_converter.py');
     } else {
         return res.status(400).json({ error: '不支持的文件类型' });
     }
@@ -142,29 +155,55 @@ app.post('/convert', upload.single('file'), (req, res) => {
         env: {
             ...process.env,
             PYTHONPATH: process.env.PYTHONPATH || '',
-            PYTHONIOENCODING: 'utf-8'
+            PYTHONIOENCODING: 'utf-8',
+            PYTHONUNBUFFERED: '1'
         }
     });
 
-    let output = '';
+    let stdoutBuffer = '';
     let errorOutput = '';
+    let hasCompleted = false;
+
+    function processSSEMessages(buffer) {
+        const parts = buffer.split(/\n\ndata: /);
+        const messages = parts.map((p, i) => (i === 0 ? p : 'data: ' + p));
+        let remainder = '';
+        if (messages.length > 0) {
+            const last = messages[messages.length - 1];
+            try {
+                if (last.startsWith('data: ')) {
+                    JSON.parse(last.slice(6).trim());
+                }
+            } catch (e) {
+                remainder = messages.pop() || '';
+            }
+        }
+        for (const msg of messages) {
+            if (msg.startsWith('data: ')) {
+                try {
+                    const data = JSON.parse(msg.slice(6).trim());
+                    if (data.type === 'progress') {
+                        res.write(`data: ${JSON.stringify(data)}\n\n`);
+                    } else if (data.type === 'debug') {
+                        res.write(`data: ${JSON.stringify(data)}\n\n`);
+                    } else if (data.type === 'complete') {
+                        hasCompleted = true;
+                        res.write(`data: ${JSON.stringify(data)}\n\n`);
+                    } else if (data.type === 'error') {
+                        errorOutput += (data.content || data.message || '') + '\n';
+                        res.write(`data: ${JSON.stringify({ type: 'error', content: data.content || data.message })}\n\n`);
+                    }
+                } catch (e) {
+                    console.error('解析 Python 输出失败:', msg, e);
+                }
+            }
+        }
+        return remainder;
+    }
 
     pythonProcess.stdout.on('data', (data) => {
-        const outputStr = data.toString();
-        try {
-            // Try to parse as JSON for progress updates
-            const progressData = JSON.parse(outputStr);
-            if (progressData.type === 'progress') {
-                // Send progress update to client
-                res.write(`data: ${JSON.stringify(progressData)}\n\n`);
-            } else if (progressData.type === 'error') {
-                // Handle error message
-                errorOutput += progressData.message;
-            }
-        } catch (e) {
-            // If not JSON, it's the final markdown output
-            output += outputStr;
-        }
+        stdoutBuffer += data.toString();
+        stdoutBuffer = processSSEMessages(stdoutBuffer);
     });
 
     pythonProcess.stderr.on('data', (data) => {
@@ -184,7 +223,12 @@ app.post('/convert', upload.single('file'), (req, res) => {
 
     pythonProcess.on('close', (code) => {
         console.log('Python进程退出，代码:', code);
-        
+
+        // 处理剩余缓冲区
+        if (stdoutBuffer.trim()) {
+            processSSEMessages(stdoutBuffer + '\n\n');
+        }
+
         // 删除上传的文件
         fs.unlink(filePath, (err) => {
             if (err) {
@@ -194,15 +238,14 @@ app.post('/convert', upload.single('file'), (req, res) => {
             }
         });
 
-        if (code === 0 && output) {
-            // 发送最终结果
-            res.write(`data: ${JSON.stringify({ type: 'complete', content: output })}\n\n`);
-            res.end();
-        } else {
-            // 发送错误信息
-            res.write(`data: ${JSON.stringify({ type: 'error', error: errorOutput || '未知错误' })}\n\n`);
-            res.end();
+        if (!hasCompleted) {
+            if (code !== 0 || errorOutput) {
+                res.write(`data: ${JSON.stringify({ type: 'error', content: errorOutput || '转换失败' })}\n\n`);
+            } else {
+                res.write(`data: ${JSON.stringify({ type: 'error', content: '未收到转换结果' })}\n\n`);
+            }
         }
+        res.end();
     });
 });
 
@@ -343,23 +386,25 @@ app.post('/convert-video', upload.single('video'), async (req, res) => {
 
         // 处理Python进程的输出
         pythonProcess.stdout.on('data', (data) => {
-            const outputStr = data.toString();
+            const outputStr = data.toString().trim();
+            console.log('Received from Python:', outputStr);
             try {
                 // 尝试解析JSON输出
                 const jsonData = JSON.parse(outputStr);
                 if (jsonData.type === 'progress') {
                     // 进度信息只发送到进度条
                     res.write(`data: ${outputStr}\n\n`);
-                } else if (jsonData.type === 'complete') {
+                } else if (jsonData.type === 'info') {
                     // 音频转换文本发送到输出框
-                    output = jsonData.content;
+                    res.write(`data: ${outputStr}\n\n`);
+                }
+                else if (jsonData.type === 'complete') {
+                    // 音频转换文本发送到输出框
                     res.write(`data: ${outputStr}\n\n`);
                 }
             } catch (e) {
-                // 如果不是JSON，则作为普通文本处理
-                // 这种情况通常是从Python脚本直接打印的文本输出
-                output = outputStr;
-                res.write(`data: ${JSON.stringify({ type: 'complete', content: outputStr })}\n\n`);
+                res.write(`data: ${outputStr}\n\n`);
+                console.warn('Ignoring non-JSON output:', outputStr);
             }
         });
 

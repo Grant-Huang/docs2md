@@ -1,8 +1,9 @@
 import sys
 import os
-import pdfplumber
 import io
 import re
+import pdfplumber
+import json
 
 # 中文处理方式说明：
 # 1. 设置标准输出和标准错误的编码为utf-8，解决控制台输出中文乱码问题
@@ -150,50 +151,80 @@ def process_text_with_formatting(page, output_format='text'):
         
         return '\n'.join(formatted_lines)
 
-def convert_pdf_to_text(pdf_path, output_format='text'):
+def convert_pdf_to_text(pdf_path, output_format='markdown'):
+    """将PDF文件转换为文本，支持markdown和纯文本格式"""
     try:
+        # 确保输出编码为UTF-8
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+        
         # 检查文件是否存在
         if not os.path.exists(pdf_path):
-            print(f"错误：文件 {pdf_path} 不存在", file=sys.stderr)
+            error_msg = f"文件不存在: {pdf_path}"
+            print(f'data: {json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)}\n\n', flush=True)
             return None
-
+            
         # 检查文件大小
         file_size = os.path.getsize(pdf_path)
+        print(f'data: {json.dumps({"type": "debug", "content": f"文件大小: {file_size} 字节"}, ensure_ascii=False)}\n\n', flush=True)
         
         if file_size == 0:
-            print(f"错误：文件 {pdf_path} 为空", file=sys.stderr)
+            error_msg = "文件为空"
+            print(f'data: {json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)}\n\n', flush=True)
             return None
-        
+            
         # 打开PDF文件
+        print(f'data: {json.dumps({"type": "debug", "content": "正在打开PDF文件..."}, ensure_ascii=False)}\n\n', flush=True)
+        
         with pdfplumber.open(pdf_path) as pdf:
             # 存储所有页面的文本
             all_text = []
             
             # 遍历所有页面
-            for page in pdf.pages:
-                # 提取带格式的文本
-                text = process_text_with_formatting(page, output_format)
+            print(f'data: {json.dumps({"type": "debug", "content": f"PDF总页数: {len(pdf.pages)}"}, ensure_ascii=False)}\n\n', flush=True)
+            
+            for i, page in enumerate(pdf.pages):
+                print(f'data: {json.dumps({"type": "debug", "content": f"正在处理第 {i+1} 页..."}, ensure_ascii=False)}\n\n', flush=True)
                 
-                if text:
-                    # 确保文本是utf-8编码
-                    if not isinstance(text, str):
-                        text = text.decode('utf-8', errors='ignore')
-                    all_text.append(text)
+                try:
+                    # 尝试提取文本，忽略CropBox警告
+                    text = page.extract_text()
+                    if text:
+                        # 确保文本是utf-8编码
+                        if not isinstance(text, str):
+                            text = text.decode('utf-8', errors='ignore')
+                        all_text.append(text)
+                except Exception as e:
+                    print(f'data: {json.dumps({"type": "debug", "content": f"处理第 {i+1} 页时出现警告: {str(e)}"}, ensure_ascii=False)}\n\n', flush=True)
+                    continue
             
             # 合并所有页面的文本
             if all_text:
                 final_text = "\n\n".join(all_text)
                 # 清理多余的空行
                 final_text = re.sub(r'\n\s*\n\s*\n', '\n\n', final_text)
+                
+                print(f'data: {json.dumps({"type": "debug", "content": f"提取文本长度: {len(final_text)} 字符"}, ensure_ascii=False)}\n\n', flush=True)
+                
+                # 输出结果
+                result = {
+                    "type": "complete",
+                    "content": final_text.strip()
+                }
+                print(f'data: {json.dumps(result, ensure_ascii=False)}\n\n', flush=True)
                 return final_text.strip()
             else:
-                print("警告：没有提取到任何文本", file=sys.stderr)
+                error_msg = "警告：没有提取到任何文本"
+                print(f'data: {json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)}\n\n', flush=True)
                 return None
 
     except Exception as e:
-        print(f"转换过程中出错: {str(e)}", file=sys.stderr)
+        error_msg = f"转换过程中出错: {str(e)}"
+        print(f'data: {json.dumps({"type": "error", "content": error_msg}, ensure_ascii=False)}\n\n', flush=True)
+        
         import traceback
-        print(f"错误详情: {traceback.format_exc()}", file=sys.stderr)
+        error_detail = traceback.format_exc()
+        print(f'data: {json.dumps({"type": "error", "content": f"错误详情: {error_detail}"}, ensure_ascii=False)}\n\n', flush=True)
         return None
 
 if __name__ == "__main__":

@@ -45,6 +45,7 @@ Thumbs.db
 # Project specific
 test-page/
 uploads/
+output/
 *.pdf
 *.md
 !README.md
