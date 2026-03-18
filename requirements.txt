@@ -8,6 +8,9 @@ markitdown>=0.0.1
 openai>=1.0.0
 aiofiles>=23.0.0
 
+# MCP 服务器（Claude 桌面版 / 任意 MCP 客户端集成）
+mcp[cli]>=1.0.0
+
 # 旧版格式升级（.doc → .docx，.xls → .xlsx）
 # Linux/Mac：需安装系统包 LibreOffice（sudo apt install libreoffice 或 brew install libreoffice）
 # Windows：优先使用 LibreOffice，不可用时退化为 win32com（需安装 Microsoft Office）
