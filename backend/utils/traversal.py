@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import List, Tuple
 
 from backend.config import MAX_FILES_PER_BATCH
+from backend.converters.image_converter import IMAGE_EXTENSIONS
 
-SUPPORTED_EXTENSIONS = {".docx", ".doc", ".xlsx", ".xls"}
+SUPPORTED_EXTENSIONS = {".docx", ".doc", ".xlsx", ".xls", ".pdf", ".txt"} | IMAGE_EXTENSIONS
 
 # 旧版格式：有对应新版同名文件时跳过，避免重复处理
 _LEGACY_EXTENSIONS = {".doc": ".docx", ".xls": ".xlsx"}
@@ -77,6 +78,9 @@ async def traverse_and_convert(
     from backend.converters.doc2docx_converter import convert_legacy_dir
     from backend.converters.docx_converter import convert_docx
     from backend.converters.excel_converter import convert_excel
+    from backend.converters.pdf_converter import convert_pdf
+    from backend.converters.txt_converter import convert_txt
+    from backend.converters.image_converter import convert_image, IMAGE_EXTENSIONS as _IMG_EXTS
 
     # 阶段1：旧版格式升级
     await convert_legacy_dir(input_dir, sse_callback=sse_callback)
@@ -104,6 +108,12 @@ async def traverse_and_convert(
             r = await convert_docx(fp, out_path.parent, format, sse_callback=sse_callback)
         elif ext in (".xlsx", ".xls"):
             r = await convert_excel(fp, out_path.parent, format, sse_callback=sse_callback)
+        elif ext == ".pdf":
+            r = await convert_pdf(fp, out_path.parent, format, sse_callback=sse_callback)
+        elif ext == ".txt":
+            r = await convert_txt(fp, out_path.parent, format, sse_callback=sse_callback)
+        elif ext in _IMG_EXTS:
+            r = await convert_image(fp, out_path.parent, format, sse_callback=sse_callback)
         else:
             continue
 

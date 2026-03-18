@@ -12,3 +12,9 @@ aiofiles>=23.0.0
 # Linux/Mac：需安装系统包 LibreOffice（sudo apt install libreoffice 或 brew install libreoffice）
 # Windows：优先使用 LibreOffice，不可用时退化为 win32com（需安装 Microsoft Office）
 pywin32>=306; sys_platform == "win32"
+
+# PDF 支持（文字型和图片型 PDF）
+pymupdf>=1.23.0
+
+# Pillow（图片文件支持）
+Pillow>=10.0.0

@@ -12,6 +12,9 @@ from pathlib import Path
 from backend.config import UPLOADS_DIR, OUTPUT_DIR, MAX_FILE_SIZE
 from backend.converters.docx_converter import convert_docx
 from backend.converters.excel_converter import convert_excel
+from backend.converters.pdf_converter import convert_pdf
+from backend.converters.txt_converter import convert_txt
+from backend.converters.image_converter import convert_image, IMAGE_EXTENSIONS
 
 router = APIRouter()
 
@@ -69,6 +72,12 @@ async def convert_file(
                 result = await convert_docx(tmp_path, out_base, format, sse_callback=sse_callback)
             elif ext in (".xlsx", ".xls"):
                 result = await convert_excel(tmp_path, out_base, format, sse_callback=sse_callback)
+            elif ext == ".pdf":
+                result = await convert_pdf(tmp_path, out_base, format, sse_callback=sse_callback)
+            elif ext == ".txt":
+                result = await convert_txt(tmp_path, out_base, format, sse_callback=sse_callback)
+            elif ext in IMAGE_EXTENSIONS:
+                result = await convert_image(tmp_path, out_base, format, sse_callback=sse_callback)
             else:
                 await queue.put({"type": "_done", "result": {"error": f"不支持格式: {ext}"}})
                 return
@@ -174,7 +183,7 @@ async def convert_directory_upload(
     tmp_root.mkdir(parents=True, exist_ok=True)
 
     # 阶段1：先把所有上传文件保存到临时目录（在返回 SSE 流之前完成）
-    supported = {".docx", ".doc", ".xlsx", ".xls"}
+    supported = {".docx", ".doc", ".xlsx", ".xls", ".pdf", ".txt"} | IMAGE_EXTENSIONS
     saved_count = 0
     for f in files:
         name = f.filename or ""
