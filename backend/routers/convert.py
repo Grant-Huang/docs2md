@@ -165,7 +165,7 @@ async def convert_directory_upload(
     output_dir: str = Form(""),
     format: str = Form("md"),
 ):
-    """目录批量转换（上传多个文件，保持目录结构）"""
+    """目录批量转换（上传多个文件，保持目录结构），返回 SSE 进度流"""
     if format not in ("md", "txt"):
         raise HTTPException(400, "format 必须为 md 或 txt")
 
@@ -173,24 +173,64 @@ async def convert_directory_upload(
     tmp_root = UPLOADS_DIR / f"dir_{int(time.time()*1000)}_{random.randint(1000,9999)}"
     tmp_root.mkdir(parents=True, exist_ok=True)
 
-    try:
-        supported = {".docx", ".doc", ".xlsx", ".xls"}
-        for f in files:
-            name = f.filename or ""
-            if not name or Path(name).suffix.lower() not in supported:
-                continue
-            rel = name
-            target = tmp_root / rel
-            target.parent.mkdir(parents=True, exist_ok=True)
-            content = await f.read()
-            if len(content) <= MAX_FILE_SIZE:
-                target.write_bytes(content)
+    # 阶段1：先把所有上传文件保存到临时目录（在返回 SSE 流之前完成）
+    supported = {".docx", ".doc", ".xlsx", ".xls"}
+    saved_count = 0
+    for f in files:
+        name = f.filename or ""
+        if not name or Path(name).suffix.lower() not in supported:
+            continue
+        target = tmp_root / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        content = await f.read()
+        if len(content) <= MAX_FILE_SIZE:
+            target.write_bytes(content)
+            saved_count += 1
 
-        from backend.utils.traversal import traverse_and_convert
+    queue: asyncio.Queue = asyncio.Queue()
 
-        results = await traverse_and_convert(tmp_root, out_base, format)
-        return {"status": "ok", "results": results}
-    finally:
-        import shutil
-        if tmp_root.exists():
-            shutil.rmtree(tmp_root, ignore_errors=True)
+    async def sse_callback(data: dict):
+        await queue.put(data)
+
+    async def run_convert():
+        try:
+            from backend.utils.traversal import traverse_and_convert
+            results = await traverse_and_convert(tmp_root, out_base, format, sse_callback=sse_callback)
+            await queue.put({"type": "_done", "result": {"status": "ok", "results": results}})
+        except Exception as e:
+            await queue.put({"type": "_done", "result": {"error": str(e)}})
+        finally:
+            import shutil
+            if tmp_root.exists():
+                shutil.rmtree(tmp_root, ignore_errors=True)
+
+    async def sse_stream():
+        yield f"data: {json.dumps({'type': 'debug', 'content': f'已接收 {saved_count} 个文件，开始处理...'}, ensure_ascii=False)}\n\n"
+        task = asyncio.create_task(run_convert())
+        try:
+            while True:
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=600)
+                except asyncio.TimeoutError:
+                    yield f"data: {json.dumps({'type': 'error', 'content': '转换超时'}, ensure_ascii=False)}\n\n"
+                    break
+                if msg.get("type") == "_done":
+                    r = msg.get("result", {})
+                    if r.get("error"):
+                        yield f"data: {json.dumps({'type': 'error', 'content': r['error']}, ensure_ascii=False)}\n\n"
+                    else:
+                        yield f"data: {json.dumps({'type': 'complete', 'results': r.get('results', [])}, ensure_ascii=False)}\n\n"
+                    break
+                yield f"data: {json.dumps(msg, ensure_ascii=False)}\n\n"
+        finally:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+    return StreamingResponse(
+        sse_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"},
+    )

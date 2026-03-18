@@ -188,6 +188,11 @@ async def convert_legacy_dir(
 
         if result["success"]:
             await emit({"type": "debug", "content": f"  ✓ {fp.name} → {fp.stem}{new_ext}"})
+            # 删除原始旧版文件，避免后续流程重复处理
+            try:
+                fp.unlink(missing_ok=True)
+            except OSError:
+                pass
         else:
             await emit({
                 "type": "debug",
