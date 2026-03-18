@@ -81,13 +81,21 @@ async def traverse_and_convert(
     # 阶段1：旧版格式升级
     await convert_legacy_dir(input_dir, sse_callback=sse_callback)
 
-    # 阶段2：收集文件（跳过已有新版对应文件的旧版文件）
+    # 阶段2：收集文件（旧版文件已被删除，直接收集新版）
     files = collect_files(input_dir)
+    total = len(files)
+
+    async def emit(data: dict):
+        if sse_callback:
+            await sse_callback(data)
+
+    await emit({"type": "debug", "content": f"发现 {total} 个文件，开始转换..."})
 
     results = []
     converted = []  # (input_path, output_path)
 
-    for fp in files:
+    for i, fp in enumerate(files):
+        await emit({"type": "debug", "content": f"解析第 {i + 1}/{total} 个文件：{fp.name}"})
         out_path = get_output_path(fp, input_dir, output_dir, format)
         out_path.parent.mkdir(parents=True, exist_ok=True)
 

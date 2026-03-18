@@ -155,7 +155,9 @@ def _find_insert_after_block(
                     return 0
     except Exception:
         pass
-    return -1
+    # 元素无法定位到 body_children：插入到文档起始附近（block 0 之后），
+    # 而不是追加到末尾，避免图片顺序严重错乱。
+    return 0
 
 
 def _get_image_blob(part, rid: str) -> Optional[bytes]:
@@ -254,7 +256,7 @@ async def convert_docx(
 
         await emit({"type": "debug", "content": "正在加载文档..."})
         doc = await asyncio.to_thread(Document, str(input_path))
-        await emit({"type": "debug", "content": "文档加载完成，正在提取内容..."})
+        await emit({"type": "debug", "content": "文本解析中..."})
         output_dir.mkdir(parents=True, exist_ok=True)
         assets_dir = output_dir / "assets"
         assets_dir.mkdir(exist_ok=True)

@@ -240,53 +240,91 @@
         formData.append("output_dir", getOutputDir());
         formData.append("format", format.value);
 
-        log("开始批量转换，共 " + formData.getAll("files").length + " 个文件");
+        const fileCount = formData.getAll("files").length;
+        log("正在上传 " + fileCount + " 个文件，请稍候...");
         const resp = await fetch("/api/convert-dir-upload", {
             method: "POST",
             body: formData,
         });
 
-        const data = await resp.json();
         if (!resp.ok) {
-            log("错误: " + (data.detail || resp.statusText));
+            try {
+                const err = await resp.json();
+                log("错误: " + (err.detail || resp.statusText));
+            } catch (_) {
+                log("请求失败: " + resp.status);
+            }
             return;
         }
-        log("转换完成");
-        if (data.results && data.results.length) {
-            setIndex(data.results);
-            if (outputDirHandle) {
-                const items = data.results.filter(
-                    (r) => r.output && !r.path.includes("index")
-                );
-                for (const r of items) {
-                    const relPath = r.output
-                        .replace(/^.*[\\/]output[\\/]?/, "")
-                        .replace(/\\/g, "/");
-                    if (!relPath) continue;
-                    try {
-                        const resp = await fetch("/output/" + relPath);
-                        if (resp.ok) {
-                            const blob = await resp.blob();
-                            await writeToOutputDir(relPath, blob);
-                            log("已保存: " + relPath);
+
+        // SSE 流式读取进度
+        const reader = resp.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+
+        async function handleComplete(results) {
+            log("批量转换完成");
+            if (results && results.length) {
+                setIndex(results);
+                if (outputDirHandle) {
+                    const items = results.filter(
+                        (r) => r.output && !r.path.includes("index")
+                    );
+                    for (const r of items) {
+                        const relPath = r.output
+                            .replace(/^.*[\\/]output[\\/]?/, "")
+                            .replace(/\\/g, "/");
+                        if (!relPath) continue;
+                        try {
+                            const fr = await fetch("/output/" + relPath);
+                            if (fr.ok) {
+                                const blob = await fr.blob();
+                                await writeToOutputDir(relPath, blob);
+                                log("已保存: " + relPath);
+                            }
+                        } catch (e) {
+                            log("保存失败 " + relPath + ": " + e.message);
                         }
-                    } catch (e) {
-                        log("保存失败 " + relPath + ": " + e.message);
+                    }
+                    const idxItem = results.find((r) => r.path === "index");
+                    if (idxItem && idxItem.content) {
+                        try {
+                            await writeToOutputDir("index.md", idxItem.content);
+                            log("已保存: index.md");
+                        } catch (e) {
+                            log("保存 index 失败: " + e.message);
+                        }
                     }
                 }
-                const idxItem = data.results.find((r) => r.path === "index");
-                if (idxItem && idxItem.content) {
-                    try {
-                        await writeToOutputDir("index.md", idxItem.content);
-                        log("已保存: index.md");
-                    } catch (e) {
-                        log("保存 index 失败: " + e.message);
-                    }
-                }
+            } else {
+                setResult("无有效文件", false);
             }
-        } else {
-            setResult("无有效文件", false);
         }
+
+        function processChunk(chunk) {
+            const parts = chunk.split(/\n\ndata: /);
+            const last = parts.pop() || "";
+            for (let i = 0; i < parts.length; i++) {
+                const p = i === 0 ? parts[i] : "data: " + parts[i];
+                const jsonStr = p.startsWith("data: ") ? p.slice(6).trim() : p.trim();
+                if (!jsonStr) continue;
+                try {
+                    const data = JSON.parse(jsonStr);
+                    if (data.type === "debug") log(data.content);
+                    else if (data.type === "error") log("错误: " + data.content);
+                    else if (data.type === "complete") handleComplete(data.results);
+                } catch (_) {}
+            }
+            return last;
+        }
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            buffer = processChunk(buffer);
+        }
+        if (buffer.trim()) processChunk(buffer + "\n\n");
     }
 
     function getSupportedFiles() {
