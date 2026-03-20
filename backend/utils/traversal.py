@@ -48,13 +48,49 @@ def get_output_path(input_path: Path, input_dir: Path, output_dir: Path, format:
     return output_dir / rel.parent / new_name
 
 
-def generate_index_md(results: List[Tuple[Path, Path]], format: str) -> str:
-    """生成 index.md 内容"""
-    lines = ["# 转换结果索引\n", ""]
-    for inp, out in results:
-        name = out.stem
-        rel = out.name
-        lines.append(f"- [{name}]({rel})")
+def generate_index_md(
+    results: List[Tuple[Path, Path]],
+    format: str,
+    output_root: Path,
+) -> str:
+    """生成 index.md，按原始目录结构分组列出所有转换文件。
+
+    参数：
+        results     : (input_path, output_path) 元组列表
+        format      : 输出格式（md / txt），仅供扩展备用
+        output_root : 输出根目录（index.md 所在目录），用于计算相对链接
+    """
+    from collections import defaultdict
+
+    # dir_key（相对目录字符串） → [(stem, relative_link)]
+    groups: dict = defaultdict(list)
+
+    for _inp, out in results:
+        try:
+            rel = out.relative_to(output_root)
+        except ValueError:
+            rel = Path(out.name)
+
+        # 目录键：相对于 output_root 的父目录，"." 表示根目录
+        dir_key = rel.parent.as_posix()  # 统一用正斜杠，跨平台一致
+        link = rel.as_posix()
+        groups[dir_key].append((out.stem, link))
+
+    lines = ["# 转换结果索引", ""]
+
+    # 根目录优先，其余按字典序排序
+    sorted_keys = sorted(groups.keys(), key=lambda d: ("" if d == "." else d))
+
+    for dir_key in sorted_keys:
+        if dir_key == ".":
+            lines.append("## 根目录")
+        else:
+            lines.append(f"## {dir_key}/")
+        lines.append("")
+        for stem, link in sorted(groups[dir_key]):
+            lines.append(f"- [{stem}]({link})")
+        lines.append("")
+
     return "\n".join(lines)
 
 
@@ -128,7 +164,7 @@ async def traverse_and_convert(
             converted.append((fp, out_path))
 
     if converted:
-        index_content = generate_index_md(converted, format)
+        index_content = generate_index_md(converted, format, output_dir)
         index_path = output_dir / "index.md"
         index_path.write_text(index_content, encoding="utf-8")
         results.append({"path": "index", "output": str(index_path), "content": index_content})

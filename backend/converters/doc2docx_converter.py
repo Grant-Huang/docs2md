@@ -26,11 +26,28 @@ _LEGACY_TO_NEW_EXT = {
 
 
 def _find_soffice() -> Optional[str]:
-    """查找系统中的 LibreOffice / soffice 可执行文件"""
+    """查找系统中的 LibreOffice / soffice 可执行文件。
+
+    查找顺序：
+    1. PATH 中的 soffice / libreoffice（覆盖 brew formula、apt、snap 等安装方式）
+    2. macOS App Bundle 常见位置（覆盖 brew --cask 安装方式）
+    """
     for name in ("soffice", "libreoffice"):
         path = shutil.which(name)
         if path:
             return path
+
+    # macOS：brew --cask libreoffice 安装的 .app 不会自动加入 PATH
+    if platform.system() == "Darwin":
+        import os
+        mac_candidates = [
+            "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+            os.path.expanduser("~/Applications/LibreOffice.app/Contents/MacOS/soffice"),
+        ]
+        for p in mac_candidates:
+            if Path(p).is_file() and os.access(p, os.X_OK):
+                return p
+
     return None
 
 
