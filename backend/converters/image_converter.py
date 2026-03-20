@@ -54,10 +54,20 @@ async def convert_image(
         ]
 
         # 调用 Qwen3-VL 解析图片
+        # BMP / TIFF 不被主流 VL API 原生支持，先用 Pillow 转为 PNG
         await emit({"type": "debug", "content": f"调用 VL 解析图片：{input_path.name}"})
+        vl_img_path = dest_img
+        if dest_img.suffix.lower() in {".bmp", ".tiff", ".tif"}:
+            try:
+                from PIL import Image as _PILImage
+                vl_img_path = dest_img.with_suffix(".png")
+                with _PILImage.open(dest_img) as _im:
+                    _im.convert("RGB").save(vl_img_path, "PNG")
+            except Exception:
+                vl_img_path = dest_img  # 转换失败则使用原图，尽力而为
         try:
             from backend.services.qwen_vl import analyze_image
-            vl_result = await asyncio.to_thread(analyze_image, dest_img)
+            vl_result = await asyncio.to_thread(analyze_image, vl_img_path)
             if vl_result and not vl_result.startswith("[未配置"):
                 md_lines.append("## 图片内容描述")
                 md_lines.append("")
