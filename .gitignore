@@ -49,5 +49,6 @@ output/
 *.pdf
 *.md
 !README.md
+!docs/*.md
 *.txt
 !requirements.txt

@@ -51,6 +51,93 @@ uvicorn backend.main:app --host 0.0.0.0 --port 8000
 
 ---
 
+## CLI 命令行
+
+```bash
+# 单文件转换（输出到同目录，默认 Markdown）
+python all2md.py report.docx
+python all2md.py data.xls -o results/ --format txt
+
+# 目录批量转换（自动升级 .doc/.xls，生成 index.md）
+python all2md.py docs/
+python all2md.py docs/ -o output/ --format txt --verbose
+```
+
+| 参数 | 说明 |
+|------|------|
+| `input` | 输入文件（.docx/.doc/.xlsx/.xls）或目录 |
+| `-o / --output` | 输出目录（单文件默认同目录；目录默认 `<input>_output/`） |
+| `-f / --format` | `md`（Markdown，默认）或 `txt`（纯文本） |
+| `-v / --verbose` | 显示详细进度（含图片解析占位符信息） |
+
+---
+
+## MCP 集成（Claude 桌面版 / 任意 MCP 客户端）
+
+通过 MCP 协议，将转换工具直接接入 Claude 桌面版，在对话中即可驱动文档转换。
+
+### 配置 Claude 桌面版
+
+编辑 claude_desktop_config.json（重启 Claude 后生效）：
+
+- **macOS**：`~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**：`%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "docs2md": {
+      "command": "python",
+      "args": ["/absolute/path/to/docs2md/mcp_server.py"]
+    }
+  }
+}
+```
+
+如果使用虚拟环境，将 `"command"` 指向 venv 中的 python：
+
+```json
+{
+  "mcpServers": {
+    "docs2md": {
+      "command": "/absolute/path/to/docs2md/.venv/bin/python",
+      "args": ["/absolute/path/to/docs2md/mcp_server.py"]
+    }
+  }
+}
+```
+
+### 可用工具
+
+| 工具 | 参数 | 说明 |
+|------|------|------|
+| `convert_file` | `input_path`, `output_dir?`, `format?` | 转换单个文件 |
+| `convert_directory` | `input_dir`, `output_dir?`, `format?` | 目录批量转换（含旧版格式升级） |
+
+### 对话示例
+
+> "把 /Users/me/documents/report.docx 转为 Markdown"
+> "将 /Users/me/docs 整个文件夹批量转换，输出到 /Users/me/output"
+> "转换 /data/table.xlsx，使用 txt 格式"
+
+### AI Skills 集成文档
+
+完整的 AI 集成指南（含 MCP 工具定义、OpenAI Function Calling JSON Schema、REST API 示例、LangChain 接入代码）可通过以下方式访问：
+
+- **Web URL（服务运行时）：** `http://<host>:8000/api/skills-guide`
+- **源文件：** `docs/ai_skills_guide.md`
+
+将此 URL 发给任何 AI 平台或 Agent 框架，它们即可解析并创建对应的 skill / tool / action。
+
+### 手动测试 MCP 服务器
+
+```bash
+# 或直接用 mcp dev 调试
+mcp dev mcp_server.py
+```
+
+---
+
 ## 配置
 
 | 变量 | 必填 | 默认值 | 说明 |
@@ -86,7 +173,11 @@ docs2md/
 ├── frontend/                     # 静态前端（HTML/CSS/JS）
 ├── uploads/                      # 临时上传目录（运行时生成）
 ├── output/                       # 默认输出目录（运行时生成）
-├── run.py                        # 启动脚本
+├── run.py                        # Web 服务启动脚本
+├── all2md.py                     # CLI 入口
+├── mcp_server.py                 # MCP 服务器（Claude 桌面版集成）
+├── docs/
+│   └── ai_skills_guide.md        # AI 集成指南（MCP / REST API / Function Calling）
 ├── requirements.txt
 └── .env.example
 ```
