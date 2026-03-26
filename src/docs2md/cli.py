@@ -23,6 +23,19 @@ import sys
 from pathlib import Path
 
 
+def _try_force_utf8_stdio() -> None:
+    # Windows / 某些终端默认编码可能不是 UTF-8，导致中文帮助与日志乱码。
+    # 这里尽量最小化处理：能 reconfigure 就切到 utf-8，失败则不影响运行。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+    try:
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
+
 def make_sse_callback(quiet: bool):
     async def _cb(data: dict):
         if quiet:
@@ -117,6 +130,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main() -> None:
+    _try_force_utf8_stdio()
     parser = build_parser()
     args = parser.parse_args()
 
