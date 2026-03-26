@@ -1,0 +1,90 @@
+"""
+图片文件转 Markdown 转换器
+支持 .png / .jpg / .jpeg / .gif / .webp / .bmp / .tiff 等常见格式。
+生成的 Markdown 文件：
+  - 文件名与原图片同名（扩展名改为 .md）
+  - 将图片复制到 assets/ 子目录并在 md 中内嵌引用
+  - 若配置了 Qwen3-VL，则追加 AI 解析描述
+"""
+
+from __future__ import annotations
+
+import asyncio
+import shutil
+from pathlib import Path
+from typing import Awaitable, Callable, Optional
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".tiff", ".tif"}
+
+
+async def convert_image(
+    input_path: Path,
+    output_dir: Path,
+    format: str,
+    sse_callback: Optional[Callable[[dict], Awaitable[None]]] = None,
+) -> dict:
+    async def emit(data: dict):
+        if sse_callback:
+            await sse_callback(data)
+
+    try:
+        await emit({"type": "debug", "content": f"正在处理图片：{input_path.name}"})
+
+        output_dir.mkdir(parents=True, exist_ok=True)
+        assets_dir = output_dir / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        dest_img = assets_dir / input_path.name
+        shutil.copy2(str(input_path), str(dest_img))
+
+        rel_img = f"assets/{input_path.name}"
+        title = input_path.stem
+
+        md_lines = [f"# {title}", "", f"![{input_path.name}]({rel_img})", ""]
+
+        await emit({"type": "debug", "content": f"调用 VL 解析图片：{input_path.name}"})
+        vl_img_path = dest_img
+        if dest_img.suffix.lower() in {".bmp", ".tiff", ".tif"}:
+            try:
+                from PIL import Image as _PILImage
+
+                vl_img_path = dest_img.with_suffix(".png")
+                with _PILImage.open(dest_img) as _im:
+                    _im.convert("RGB").save(vl_img_path, "PNG")
+            except Exception:
+                vl_img_path = dest_img
+
+        try:
+            from docs2md.services.qwen_vl import analyze_image
+
+            vl_result = await asyncio.to_thread(analyze_image, vl_img_path)
+            if vl_result:
+                md_lines.append("## 图片内容描述")
+                md_lines.append("")
+                for line in vl_result.splitlines():
+                    md_lines.append(f"> {line}" if line.strip() else ">")
+                md_lines.append("")
+        except Exception as e:
+            md_lines.append(f"> [图片解析失败: {e}]")
+            md_lines.append("")
+
+        content = "\n".join(md_lines)
+
+        if format == "txt":
+            import re
+
+            content = re.sub(r"^#+\s*", "", content, flags=re.MULTILINE)
+            content = re.sub(r"^>\s?", "", content, flags=re.MULTILINE)
+            content = content.strip()
+
+        out_ext = ".md" if format == "md" else ".txt"
+        out_path = output_dir / (input_path.stem + out_ext)
+        out_path.write_text(content, encoding="utf-8")
+
+        await emit({"type": "complete", "content": content[:5000] + ("..." if len(content) > 5000 else "")})
+        return {"content": content, "path": str(out_path)}
+
+    except Exception as e:
+        await emit({"type": "error", "content": str(e)})
+        return {"error": str(e)}
+
