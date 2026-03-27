@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "docs2md"
-version = "0.1.0"
+version = "0.2.0"
 description = "将文档/图片转换为 Markdown 或纯文本的工具包（含 CLI）"
 readme = "README.md"
 requires-python = ">=3.11"
