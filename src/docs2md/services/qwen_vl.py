@@ -57,6 +57,29 @@ def _get_env(name: str, default: str = "") -> str:
     return val if val is not None and val != "" else default
 
 
+def is_image_parse_enabled() -> bool:
+    """
+    图片解析总开关。
+    支持以下环境变量：
+    - DOCS2MD_DISABLE_IMAGE_PARSE=1  -> 禁用
+    - DOCS2MD_SKIP_IMAGE=1           -> 禁用
+    - DOCS2MD_VL_ENABLED=0           -> 禁用
+    """
+    disable_image_parse = _get_env("DOCS2MD_DISABLE_IMAGE_PARSE", "").strip().lower()
+    if disable_image_parse in {"1", "true", "yes", "on"}:
+        return False
+
+    skip_image = _get_env("DOCS2MD_SKIP_IMAGE", "").strip().lower()
+    if skip_image in {"1", "true", "yes", "on"}:
+        return False
+
+    vl_enabled = _get_env("DOCS2MD_VL_ENABLED", "1").strip().lower()
+    if vl_enabled in {"0", "false", "no", "off"}:
+        return False
+
+    return True
+
+
 def analyze_image(image_path: Path, prompt: Optional[str] = None) -> str:
     """
     调用 Qwen3-VL 解析图片。
@@ -66,6 +89,9 @@ def analyze_image(image_path: Path, prompt: Optional[str] = None) -> str:
     - DASHSCOPE_BASE_URL（默认 DashScope compatible-mode）
     - QWEN_VL_MODEL（默认 qwen3-vl-plus）
     """
+    if not is_image_parse_enabled():
+        return "[图片解析已禁用]"
+
     api_key = _get_env("DASHSCOPE_API_KEY", "")
     if not api_key:
         raise RuntimeError("缺少环境变量 DASHSCOPE_API_KEY，无法调用 VL 服务")

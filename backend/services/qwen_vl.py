@@ -3,6 +3,7 @@ Qwen3-VL 图片解析服务
 通过 DashScope 兼容接口调用
 配置从 .env 环境变量读取
 """
+import os
 import base64
 from pathlib import Path
 from typing import Optional
@@ -50,6 +51,27 @@ Mermaid 源码： 必须提供完整的 Mermaid.js 源码，以 1:1 还原图中
 综合处理： 如果图片包含多种元素（如架构图中嵌套了流程），请同时执行相关协议的描述部分。"""
 
 
+def _get_env(name: str, default: str = "") -> str:
+    val = os.getenv(name)
+    return val if val is not None and val != "" else default
+
+
+def is_image_parse_enabled() -> bool:
+    disable_image_parse = _get_env("DOCS2MD_DISABLE_IMAGE_PARSE", "").strip().lower()
+    if disable_image_parse in {"1", "true", "yes", "on"}:
+        return False
+
+    skip_image = _get_env("DOCS2MD_SKIP_IMAGE", "").strip().lower()
+    if skip_image in {"1", "true", "yes", "on"}:
+        return False
+
+    vl_enabled = _get_env("DOCS2MD_VL_ENABLED", "1").strip().lower()
+    if vl_enabled in {"0", "false", "no", "off"}:
+        return False
+
+    return True
+
+
 def analyze_image(
     image_path: Path,
     prompt: Optional[str] = None,
@@ -60,6 +82,9 @@ def analyze_image(
     :param prompt: 可选自定义提示词，默认使用 IMAGE_PROMPT
     :return: 解析结果文本
     """
+    if not is_image_parse_enabled():
+        return "[图片解析已禁用]"
+
     if not DASHSCOPE_API_KEY:
         return "[未配置 DASHSCOPE_API_KEY，跳过图片解析]"
 

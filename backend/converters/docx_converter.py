@@ -14,7 +14,7 @@ from docx.oxml.table import CT_Tbl
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from backend.services.qwen_vl import analyze_image
+from backend.services.qwen_vl import analyze_image, is_image_parse_enabled
 
 
 def _dedupe_row(cells: List[str]) -> List[str]:
@@ -322,6 +322,7 @@ async def convert_docx(
 
         # 阶段1：收集待解析图片列表 (path, name)
         images_to_parse: List[tuple] = []
+        parse_enabled = is_image_parse_enabled()
 
         async def add_image_block(blob: bytes, rid_ref: str, source: str) -> str:
             """保存图片、添加占位符块，返回块内容"""
@@ -335,11 +336,11 @@ async def convert_docx(
             img_name = f"img_{image_counter}{ext}"
             img_path = assets_dir / img_name
             img_path.write_bytes(blob)
-            images_to_parse.append((img_path, img_name))
+            if parse_enabled:
+                images_to_parse.append((img_path, img_name))
             rel_path = f"assets/{img_name}"
-            return _format_image_block(
-                rel_path, img_name, "pending", content_format
-            )
+            analysis = "pending" if parse_enabled else "[图片解析已禁用]"
+            return _format_image_block(rel_path, img_name, analysis, content_format)
 
         blocks = list(iter_block_items(doc))
         rid_to_block_index = await asyncio.to_thread(
@@ -473,6 +474,11 @@ async def convert_docx(
             await emit({
                 "type": "debug",
                 "content": f"已检测到{len(images_to_parse)}个图片，已保存为图片资源",
+            })
+        elif not parse_enabled and image_counter > 0:
+            await emit({
+                "type": "debug",
+                "content": "已禁用图片解析（通过环境变量），仅保留图片引用",
             })
 
         # 阶段2：立即渲染，显示文字+图片链接+「正在解析...」

@@ -42,31 +42,34 @@ async def convert_image(
 
         md_lines = [f"# {title}", "", f"![{input_path.name}]({rel_img})", ""]
 
-        await emit({"type": "debug", "content": f"调用 VL 解析图片：{input_path.name}"})
-        vl_img_path = dest_img
-        if dest_img.suffix.lower() in {".bmp", ".tiff", ".tif"}:
+        from docs2md.services.qwen_vl import analyze_image, is_image_parse_enabled
+
+        if is_image_parse_enabled():
+            await emit({"type": "debug", "content": f"调用 VL 解析图片：{input_path.name}"})
+            vl_img_path = dest_img
+            if dest_img.suffix.lower() in {".bmp", ".tiff", ".tif"}:
+                try:
+                    from PIL import Image as _PILImage
+
+                    vl_img_path = dest_img.with_suffix(".png")
+                    with _PILImage.open(dest_img) as _im:
+                        _im.convert("RGB").save(vl_img_path, "PNG")
+                except Exception:
+                    vl_img_path = dest_img
+
             try:
-                from PIL import Image as _PILImage
-
-                vl_img_path = dest_img.with_suffix(".png")
-                with _PILImage.open(dest_img) as _im:
-                    _im.convert("RGB").save(vl_img_path, "PNG")
-            except Exception:
-                vl_img_path = dest_img
-
-        try:
-            from docs2md.services.qwen_vl import analyze_image
-
-            vl_result = await asyncio.to_thread(analyze_image, vl_img_path)
-            if vl_result:
-                md_lines.append("## 图片内容描述")
+                vl_result = await asyncio.to_thread(analyze_image, vl_img_path)
+                if vl_result:
+                    md_lines.append("## 图片内容描述")
+                    md_lines.append("")
+                    for line in vl_result.splitlines():
+                        md_lines.append(f"> {line}" if line.strip() else ">")
+                    md_lines.append("")
+            except Exception as e:
+                md_lines.append(f"> [图片解析失败: {e}]")
                 md_lines.append("")
-                for line in vl_result.splitlines():
-                    md_lines.append(f"> {line}" if line.strip() else ">")
-                md_lines.append("")
-        except Exception as e:
-            md_lines.append(f"> [图片解析失败: {e}]")
-            md_lines.append("")
+        else:
+            await emit({"type": "debug", "content": "已禁用图片解析（通过环境变量）"})
 
         content = "\n".join(md_lines)
 

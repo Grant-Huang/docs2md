@@ -46,6 +46,12 @@ async def convert_pdf(
         parts: list[str] = []
         has_image_pages = False
 
+        try:
+            from backend.services.qwen_vl import is_image_parse_enabled
+            parse_enabled = is_image_parse_enabled()
+        except Exception:
+            parse_enabled = True
+
         for page_num in range(total_pages):
             page = doc[page_num]
             page_label = f"第 {page_num + 1}/{total_pages} 页"
@@ -70,14 +76,16 @@ async def convert_pdf(
                 pix = page.get_pixmap(matrix=mat)
                 pix.save(str(img_path))
 
-                await emit({"type": "debug", "content": f"{page_label} 为图片型，调用 VL 解析..."})
-
-                # 调用 Qwen3-VL（在线程中执行，避免阻塞事件循环）
-                try:
-                    from backend.services.qwen_vl import analyze_image
-                    vl_result = await asyncio.to_thread(analyze_image, img_path)
-                except Exception as e:
-                    vl_result = f"[图片解析失败: {e}]"
+                if parse_enabled:
+                    await emit({"type": "debug", "content": f"{page_label} 为图片型，调用 VL 解析..."})
+                    # 调用 Qwen3-VL（在线程中执行，避免阻塞事件循环）
+                    try:
+                        from backend.services.qwen_vl import analyze_image
+                        vl_result = await asyncio.to_thread(analyze_image, img_path)
+                    except Exception as e:
+                        vl_result = f"[图片解析失败: {e}]"
+                else:
+                    vl_result = "[图片解析已禁用]"
 
                 # 构造此页的 Markdown 内容
                 rel_img = f"assets/{img_name}"

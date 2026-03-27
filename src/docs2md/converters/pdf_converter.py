@@ -28,6 +28,11 @@ async def convert_pdf(
             await sse_callback(data)
 
     try:
+        from docs2md.services.qwen_vl import is_image_parse_enabled
+    except Exception:
+        is_image_parse_enabled = lambda: True
+
+    try:
         await emit({"type": "debug", "content": f"正在打开 PDF：{input_path.name}"})
 
         doc = fitz.open(str(input_path))
@@ -38,6 +43,8 @@ async def convert_pdf(
         assets_dir = output_dir / "assets"
 
         parts: list[str] = []
+
+        parse_enabled = is_image_parse_enabled()
 
         for page_num in range(total_pages):
             page = doc[page_num]
@@ -57,14 +64,16 @@ async def convert_pdf(
                 pix = page.get_pixmap(matrix=mat)
                 pix.save(str(img_path))
 
-                await emit({"type": "debug", "content": f"{page_label} 为图片型，调用 VL 解析..."})
+                if parse_enabled:
+                    await emit({"type": "debug", "content": f"{page_label} 为图片型，调用 VL 解析..."})
+                    try:
+                        from docs2md.services.qwen_vl import analyze_image
 
-                try:
-                    from docs2md.services.qwen_vl import analyze_image
-
-                    vl_result = await asyncio.to_thread(analyze_image, img_path)
-                except Exception as e:
-                    vl_result = f"[图片解析失败: {e}]"
+                        vl_result = await asyncio.to_thread(analyze_image, img_path)
+                    except Exception as e:
+                        vl_result = f"[图片解析失败: {e}]"
+                else:
+                    vl_result = "[图片解析已禁用]"
 
                 rel_img = f"assets/{img_name}"
                 page_md = (

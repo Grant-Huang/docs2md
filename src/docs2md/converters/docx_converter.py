@@ -17,7 +17,7 @@ from docx.oxml.text.paragraph import CT_P
 from docx.table import Table
 from docx.text.paragraph import Paragraph
 
-from docs2md.services.qwen_vl import analyze_image
+from docs2md.services.qwen_vl import analyze_image, is_image_parse_enabled
 
 
 def _dedupe_row(cells: List[str]) -> List[str]:
@@ -274,6 +274,7 @@ async def convert_docx(
                     pass
 
         images_to_parse: List[tuple] = []
+        parse_enabled = is_image_parse_enabled()
 
         async def add_image_block(blob: bytes, rid_ref: str, source: str) -> str:
             nonlocal image_counter
@@ -286,9 +287,11 @@ async def convert_docx(
             img_name = f"img_{image_counter}{ext}"
             img_path = assets_dir / img_name
             img_path.write_bytes(blob)
-            images_to_parse.append((img_path, img_name))
+            if parse_enabled:
+                images_to_parse.append((img_path, img_name))
             rel_path = f"assets/{img_name}"
-            return _format_image_block(rel_path, img_name, "pending", content_format)
+            analysis = "pending" if parse_enabled else "[图片解析已禁用]"
+            return _format_image_block(rel_path, img_name, analysis, content_format)
 
         blocks = list(iter_block_items(doc))
         rid_to_block_index = await asyncio.to_thread(_build_rid_to_block_index, doc, blocks)
@@ -395,6 +398,8 @@ async def convert_docx(
 
         if images_to_parse:
             await emit({"type": "debug", "content": f"已检测到{len(images_to_parse)}个图片，已保存为图片资源"})
+        elif not parse_enabled and image_counter > 0:
+            await emit({"type": "debug", "content": "已禁用图片解析（通过环境变量），仅保留图片引用"})
 
         await emit({"type": "partial", "content": final_text})
 
