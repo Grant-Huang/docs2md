@@ -169,6 +169,23 @@ mcp dev mcp_server.py
 | `MAX_FILE_SIZE` | 否 | `52428800`（50 MB） | 单文件上限（字节） |
 | `MAX_FILES_PER_BATCH` | 否 | `200` | 目录批量转换文件数上限 |
 
+### 如何禁用图片解析
+
+支持以下环境变量开关，任意一个命中即禁用图片解析（VL）：
+
+- `DOCS2MD_DISABLE_IMAGE_PARSE=1`
+- `DOCS2MD_SKIP_IMAGE=1`
+- `DOCS2MD_VL_ENABLED=0`
+
+禁用后会保留图片文件和 Markdown 图片引用，但不再调用 VL 生成图片描述。
+
+示例（Linux/macOS）：
+
+```bash
+export DOCS2MD_DISABLE_IMAGE_PARSE=1
+docs2md report.docx
+```
+
 ---
 
 ## 项目结构
