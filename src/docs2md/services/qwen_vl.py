@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 import os
+import mimetypes
 from pathlib import Path
 from typing import Optional
 
@@ -55,6 +56,11 @@ Mermaid 源码： 必须提供完整的 Mermaid.js 源码，以 1:1 还原图中
 def _get_env(name: str, default: str = "") -> str:
     val = os.getenv(name)
     return val if val is not None and val != "" else default
+
+
+def _get_mime(image_path: Path) -> str:
+    mime, _ = mimetypes.guess_type(str(image_path))
+    return mime or "application/octet-stream"
 
 
 def is_image_parse_enabled() -> bool:
@@ -105,6 +111,7 @@ def analyze_image(image_path: Path, prompt: Optional[str] = None) -> str:
     client = OpenAI(api_key=api_key, base_url=base_url)
     data = base64.b64encode(image_path.read_bytes()).decode("utf-8")
     used_prompt = prompt or IMAGE_PROMPT
+    mime = _get_mime(image_path)
 
     resp = client.chat.completions.create(
         model=model,
@@ -115,7 +122,7 @@ def analyze_image(image_path: Path, prompt: Optional[str] = None) -> str:
                     {"type": "text", "text": used_prompt},
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{data}"},
+                        "image_url": {"url": f"data:{mime};base64,{data}"},
                     },
                 ],
             }
